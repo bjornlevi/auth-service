@@ -1,0 +1,8 @@
+flask
+flask_sqlalchemy
+pymysql
+werkzeug
+pyjwt
+pytest
+pytest-flask
+flask-login

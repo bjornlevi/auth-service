@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h2 class="mb-3">Service API Keys</h2>
+
+<table class="table table-bordered table-striped align-middle">
+  <thead class="table-dark">
+    <tr>
+      <th>ID</th>
+      <th>Key</th>
+      <th>Description</th>
+      <th>Created At</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for k in keys %}
+    <tr id="key-row-{{ k.id }}">
+      <td>{{ k.id }}</td>
+      <td>
+        <code id="key-{{ k.id }}">{{ k.key }}</code>
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary ms-2"
+                data-action="copy-key"
+                data-key-id="{{ k.id }}">
+          Copy
+        </button>
+      </td>
+      <td>{{ k.description or "—" }}</td>
+      <td>{{ k.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+      <td>
+        <button type="button"
+                class="btn btn-sm btn-danger"
+                data-action="delete-key"
+                data-key-id="{{ k.id }}">
+          Delete
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="card mt-4 shadow-sm">
+  <div class="card-body">
+    <h5 class="card-title">Create New API Key</h5>
+    <form method="post" action="{{ url_for('ui.add_apikey') }}">
+      <div class="mb-3">
+        <label class="form-label">Description</label>
+        <input name="description" class="form-control" placeholder="e.g. barebone-site integration">
+      </div>
+      <button type="submit" class="btn btn-success">Generate Key</button>
+    </form>
+  </div>
+</div>
+
+<hr class="my-4">
+<a href="{{ url_for('ui.list_users') }}" class="btn btn-primary">Manage Users</a>
+
+<!-- Toast container -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+  <div id="dashboardToast" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body" id="dashboardToastMessage"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showToast(message, type="success") {
+    const toastEl = document.getElementById('dashboardToast');
+    const toastBody = document.getElementById('dashboardToastMessage');
+    toastBody.innerText = message;
+
+    toastEl.classList.remove("text-bg-success", "text-bg-danger", "text-bg-warning");
+    toastEl.classList.add("text-bg-" + type);
+
+    const toast = new bootstrap.Toast(toastEl);
+    toast.show();
+  }
+
+  function copyApiKey(keyId) {
+    const text = document.getElementById(`key-${keyId}`).innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      showToast("API key copied to clipboard!", "success");
+    }).catch(err => {
+      console.error("Failed to copy: ", err);
+      showToast("Failed to copy API key", "danger");
+    });
+  }
+
+  function deleteApiKey(keyId) {
+    if (!confirm("Delete this API key?")) return;
+    fetch(`/apikeys/delete/${keyId}`, { method: 'POST' })
+      .then(() => {
+        const row = document.getElementById(`key-row-${keyId}`);
+        if (row) row.remove();
+        showToast("API key deleted", "success");
+      })
+      .catch(err => {
+        console.error(err);
+        showToast("Failed to delete API key", "danger");
+      });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("[data-action='copy-key']").forEach(btn => {
+      btn.addEventListener("click", () => {
+        copyApiKey(btn.dataset.keyId);
+      });
+    });
+
+    document.querySelectorAll("[data-action='delete-key']").forEach(btn => {
+      btn.addEventListener("click", () => {
+        deleteApiKey(btn.dataset.keyId);
+      });
+    });
+  });
+</script>
+{% endblock %}
