@@ -37,7 +37,7 @@ def require_api_key(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         key = request.headers.get("x-api-key")
-        if not key or not ApiKey.query.filter_by(key=key).first():
+        if not key or not ServiceApiKey.query.filter_by(key=key).first():
             return jsonify({"error": "Invalid API key"}), 403
         return f(*args, **kwargs)
     return decorated

@@ -41,8 +41,8 @@ def create_app():
             print(f"[BOOTSTRAP] Default Service API key created: {default_key}")
 
     # register blueprints
-    app.register_blueprint(bp)
-    app.register_blueprint(ui_bp)
+    app.register_blueprint(bp, url_prefix="/auth")  # JSON API
+    app.register_blueprint(ui_bp)                   # Admin UI
 
     return app
 
