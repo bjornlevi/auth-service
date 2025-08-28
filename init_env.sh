@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# init_env.sh - Generate a .env file with placeholder values for auth service
+# init_env.sh - Generate a .env file with secure random values for auth service
 
 set -e
 
@@ -10,6 +10,13 @@ if [ -f "$ENV_FILE" ]; then
   exit 1
 fi
 
+# Generate secure random values
+SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+DEFAULT_API_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(64))')
+MYSQL_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
+MYSQL_ROOT_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
+DEFAULT_ADMIN_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
+
 cat > $ENV_FILE <<EOL
 # =============================
 # Auth Service Environment Config
@@ -18,17 +25,21 @@ cat > $ENV_FILE <<EOL
 # MySQL
 MYSQL_DATABASE=authdb
 MYSQL_USER=authuser
-MYSQL_PASSWORD=authpass
-MYSQL_ROOT_PASSWORD=rootpass
+MYSQL_PASSWORD=${MYSQL_PASSWORD}
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
 MYSQL_HOST=db
 
 # Flask
 FLASK_ENV=development
-SECRET_KEY=replace_with_a_secret_key
+SECRET_KEY=${SECRET_KEY}
 
 # Default admin bootstrap
 DEFAULT_ADMIN=admin
-DEFAULT_ADMIN_PASSWORD=adminpass
+DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
+
+# Default service API key (first allowed service)
+AUTH_SERVICE_API_KEY=${DEFAULT_API_KEY}
 EOL
 
-echo "✅ $ENV_FILE created. Please edit values before running 'make up'."
+echo "✅ $ENV_FILE created with secure random values."
+echo "   Default admin = admin / ${DEFAULT_ADMIN_PASSWORD}"
