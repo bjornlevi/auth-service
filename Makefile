@@ -29,5 +29,5 @@ fup:
 reset: down
 	@echo "⚠️  Removing .env and DB volumes to start fresh..."
 	@rm -f .env
-	@docker volume rm $$(docker volume ls -q | grep auth_auth-db-data) || true
+	@docker volume rm $$(docker volume ls -q | grep auth-service_auth-db-data) || true
 	@echo "✅ Reset complete. Run 'make init' to create a new .env."
