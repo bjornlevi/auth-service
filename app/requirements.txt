@@ -6,3 +6,4 @@ pyjwt
 pytest
 pytest-flask
 flask-login
+cryptography

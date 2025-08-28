@@ -1,4 +1,7 @@
-up:
+net:
+	docker network inspect authnet >/dev/null 2>&1 || docker network create authnet
+
+up: net
 	docker compose up --build -d
 
 down:
