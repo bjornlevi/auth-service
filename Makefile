@@ -1,3 +1,6 @@
+init:
+	./init_env.sh
+
 net:
 	docker network inspect authnet >/dev/null 2>&1 || docker network create authnet
 
@@ -22,3 +25,9 @@ fdown:
 
 fup:
 	docker compose up --build -d web
+
+reset: down
+	@echo "⚠️  Removing .env and DB volumes to start fresh..."
+	@rm -f .env
+	@docker volume rm $$(docker volume ls -q | grep auth_auth-db-data) || true
+	@echo "✅ Reset complete. Run 'make init' to create a new .env."
