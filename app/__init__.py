@@ -1,5 +1,6 @@
 from flask import Flask, current_app
 from flask_login import LoginManager
+from dotenv import load_dotenv 
 from .config import Config
 from .models import db, ServiceApiKey, User
 from .routes import bp
@@ -8,6 +9,8 @@ import secrets
 from werkzeug.security import generate_password_hash
 
 login_manager = LoginManager()
+# Load environment variables from .env before anything else
+load_dotenv()
 
 def create_app():
     app = Flask(__name__)
