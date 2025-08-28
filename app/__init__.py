@@ -1,6 +1,5 @@
 from flask import Flask, current_app
 from flask_login import LoginManager
-from dotenv import load_dotenv 
 from .config import Config
 from .models import db, ServiceApiKey, User
 from .routes import bp
@@ -10,7 +9,6 @@ from werkzeug.security import generate_password_hash
 
 login_manager = LoginManager()
 # Load environment variables from .env before anything else
-load_dotenv()
 
 def create_app():
     app = Flask(__name__)
@@ -29,8 +27,8 @@ def create_app():
         db.create_all()
 
         # Ensure default admin exists
-        default_admin = current_app.config.get("DEFAULT_ADMIN", "admin")
-        default_admin_password = current_app.config.get("DEFAULT_ADMIN_PASSWORD", "adminpass")
+        default_admin = current_app.config["DEFAULT_ADMIN"]
+        default_admin_password = current_app.config["DEFAULT_ADMIN_PASSWORD"]
 
         if not User.query.filter_by(username=default_admin).first():
             db.session.add(User(username=default_admin,
