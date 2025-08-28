@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, current_app
 from flask_login import LoginManager
 from .config import Config
 from .models import db, ServiceApiKey, User
@@ -26,12 +26,15 @@ def create_app():
         db.create_all()
 
         # Ensure default admin exists
-        if not User.query.filter_by(username="admin").first():
-            db.session.add(User(username="admin",
-                                password=generate_password_hash("adminpass"),
+        default_admin = current_app.config.get("DEFAULT_ADMIN", "admin")
+        default_admin_password = current_app.config.get("DEFAULT_ADMIN_PASSWORD", "adminpass")
+
+        if not User.query.filter_by(username=default_admin).first():
+            db.session.add(User(username=default_admin,
+                                password=generate_password_hash(default_admin_password),
                                 is_admin=True))
             db.session.commit()
-            print("[BOOTSTRAP] Created admin user: admin / adminpass")
+            print(f"[BOOTSTRAP] Created admin user: {default_admin} / {default_admin_password}")
 
         # Ensure at least one Service API key exists
         if not ServiceApiKey.query.first():
