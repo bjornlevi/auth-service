@@ -8,3 +8,4 @@ pytest-flask
 flask-login
 cryptography
 python-dotenv
+PyJWT

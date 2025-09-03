@@ -12,3 +12,6 @@ class Config:
     # bootstrap admin
     DEFAULT_ADMIN = os.getenv("DEFAULT_ADMIN", "admin")
     DEFAULT_ADMIN_PASSWORD = os.getenv("DEFAULT_ADMIN_PASSWORD", "adminpass")
+
+    API_PREFIX = ""
+    UI_PREFIX = ""

@@ -45,8 +45,12 @@ def create_app():
             print(f"[BOOTSTRAP] Default Service API key created: {default_key}")
 
     # register blueprints
-    app.register_blueprint(bp, url_prefix="/auth")  # JSON API
-    app.register_blueprint(ui_bp)                   # Admin UI
+    api_prefix = app.config.get("API_PREFIX", "/auth")
+    app.jinja_env.globals["api_prefix"] = api_prefix
+    ui_prefix = app.config.get("UI_PREFIX", "")  # "" = root by default
+
+    app.register_blueprint(bp, url_prefix=api_prefix)
+    app.register_blueprint(ui_bp, url_prefix=ui_prefix)
 
     return app
 

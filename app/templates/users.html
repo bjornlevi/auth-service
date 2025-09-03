@@ -92,6 +92,7 @@
 
 <script>
   let resetModal;
+  const URL_PREFIX = "{{ api_prefix|default('') }}";
 
   function showToast(message, type="success") {
     const toastEl = document.getElementById('actionToast');
@@ -105,55 +106,90 @@
     toast.show();
   }
 
-  function toggleAdmin(userId) {
-    fetch(`/users/toggle/${userId}`, { method: 'POST' })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          document.getElementById(`user-admin-${userId}`).innerText = data.is_admin ? "✅" : "❌";
-          showToast(`User ${data.username} is now ${data.is_admin ? "Admin" : "User"}`, "success");
+  async function fetchJson(url, options) {
+    options = options || {};
+    options.headers = options.headers || {};
+    options.credentials = "include"; // always send cookies
 
-          const btn = document.getElementById(`toggle-btn-${userId}`);
-          if (btn) {
-            btn.textContent = data.is_admin ? "Demote" : "Promote";
-            btn.classList.remove("btn-primary", "btn-warning");
-            btn.classList.add(data.is_admin ? "btn-warning" : "btn-primary");
-          }
-        } else {
-          showToast(data.error || "Failed to update user", "danger");
+    // Always add this header for Flask/AJAX detection
+    options.headers["X-Requested-With"] = "XMLHttpRequest";
+
+    try {
+      const res = await fetch(url, options);
+
+      const contentType = res.headers.get("content-type") || "";
+
+      // If not JSON, probably got redirected to login
+      if (contentType.indexOf("application/json") === -1) {
+        const text = await res.text();
+        if (text.toLowerCase().includes("login")) {
+          showToast("⚠️ You must log in first", "warning");
+          window.location.href = "/login";
+          return null;
         }
-      });
+        throw new Error("Unexpected non-JSON response");
+      }
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || ("Request failed with " + res.status));
+      }
+
+      return data;
+    } catch (err) {
+      showToast(err.message || "Network error", "danger");
+      return null;
+    }
   }
 
-  function deleteUser(userId, username) {
+  async function toggleAdmin(userId) {
+    const data = await fetchJson(`${URL_PREFIX}/users/toggle/${userId}`, { method: "POST" });
+    if (!data) return;
+
+    if (data.success) {
+      document.getElementById(`user-admin-${userId}`).innerText = data.is_admin ? "✅" : "❌";
+      showToast(`User ${data.username} is now ${data.is_admin ? "Admin" : "User"}`, "success");
+
+      const btn = document.getElementById(`toggle-btn-${userId}`);
+      if (btn) {
+        btn.textContent = data.is_admin ? "Demote" : "Promote";
+        btn.classList.remove("btn-primary", "btn-warning");
+        btn.classList.add(data.is_admin ? "btn-warning" : "btn-primary");
+      }
+    } else {
+      showToast(data.error || "Failed to update user", "danger");
+    }
+  }
+
+  async function deleteUser(userId, username) {
     if (!confirm(`Delete user ${username}?`)) return;
-    fetch(`/users/delete/${userId}`, { method: 'POST' })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          document.getElementById(`user-row-${userId}`).remove();
-          showToast(`User ${username} deleted`, "success");
-        } else {
-          showToast(data.error || "Failed to delete user", "danger");
-        }
-      });
+
+    const data = await fetchJson(`${URL_PREFIX}/users/delete/${userId}`, { method: "POST" });
+    if (!data) return;
+
+    if (data.success) {
+      document.getElementById(`user-row-${userId}`).remove();
+      showToast(`User ${username} deleted`, "success");
+    } else {
+      showToast(data.error || "Failed to delete user", "danger");
+    }
   }
 
-  function requestReset(userId, username) {
-    fetch(`/users/reset/${userId}`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-      .then(res => res.json())
-      .then(data => {
-        if (data.reset_url) {
-          document.getElementById("resetMessage").innerText =
-            `Share this reset link with ${username}:`;
-          document.getElementById("resetLink").value = data.reset_url;
+  async function requestReset(userId, username) {
+    const data = await fetchJson(`${URL_PREFIX}/users/reset/${userId}`, { method: "POST" });
+    if (!data) return;
 
-          resetModal = new bootstrap.Modal(document.getElementById('resetModal'));
-          resetModal.show();
-        } else {
-          showToast(data.error || "Failed to generate reset link", "danger");
-        }
-      });
+    if (data.reset_url) {
+      document.getElementById("resetMessage").innerText =
+        `Share this reset link with ${username}:`;
+      document.getElementById("resetLink").value = data.reset_url;
+
+      resetModal = new bootstrap.Modal(document.getElementById('resetModal'));
+      resetModal.show();
+    } else {
+      showToast(data.error || "Failed to generate reset link", "danger");
+    }
   }
 
   function copyResetLink() {

@@ -1,15 +1,16 @@
-version: "3.8"
 services:
-  web:
+  auth-service:
     build: .
-    ports:
-      - "5000:5000"
+    container_name: auth-service
+    expose:
+      - "5000"               # visible to other containers
     env_file: .env
     depends_on:
       db:
         condition: service_healthy
     networks:
       - authnet
+      - default
 
   db:
     image: mysql:8.0
@@ -24,7 +25,7 @@ services:
       retries: 10
       timeout: 5s
     networks:
-      - authnet
+      - default
 
 volumes:
   auth-db-data:
