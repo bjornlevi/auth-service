@@ -4,7 +4,7 @@
 <div class="row justify-content-center">
   <div class="col-md-4">
     <h2 class="mb-3">Admin Login</h2>
-    <form method="post">
+    <form method="post" action="{{ url_for('ui.login') }}">
       <div class="mb-3">
         <label class="form-label">Username</label>
         <input name="username" class="form-control" required>

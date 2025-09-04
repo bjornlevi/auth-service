@@ -1,4 +1,4 @@
-from flask import Flask, current_app
+from flask import Flask, current_app, redirect, url_for
 from flask_login import LoginManager
 from .config import Config
 from .models import db, ServiceApiKey, User
@@ -46,11 +46,16 @@ def create_app():
 
     # register blueprints
     api_prefix = app.config.get("API_PREFIX", "/auth")
-    app.jinja_env.globals["api_prefix"] = api_prefix
     ui_prefix = app.config.get("UI_PREFIX", "")  # "" = root by default
+    app.jinja_env.globals["ui_prefix"] = ui_prefix
 
     app.register_blueprint(bp, url_prefix=api_prefix)
     app.register_blueprint(ui_bp, url_prefix=ui_prefix)
+
+    @app.route("/")
+    def root_redirect():
+        # Always redirect root to the UI login
+        return redirect(url_for("ui.login"))
 
     return app
 

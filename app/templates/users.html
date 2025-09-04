@@ -92,7 +92,7 @@
 
 <script>
   let resetModal;
-  const URL_PREFIX = "{{ api_prefix|default('') }}";
+  const URL_PREFIX = "{{ ui_prefix|default('') }}";
 
   function showToast(message, type="success") {
     const toastEl = document.getElementById('actionToast');
