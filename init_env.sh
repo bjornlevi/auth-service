@@ -33,6 +33,11 @@ MYSQL_HOST=db
 FLASK_ENV=development
 SECRET_KEY=${SECRET_KEY}
 
+# Site identity
+SITE_NAME=site_name_replace
+UI_PREFIX=/ui
+API_PREFIX=/api
+
 # Default admin bootstrap
 DEFAULT_ADMIN=admin
 DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}

@@ -13,5 +13,6 @@ class Config:
     DEFAULT_ADMIN = os.getenv("DEFAULT_ADMIN", "admin")
     DEFAULT_ADMIN_PASSWORD = os.getenv("DEFAULT_ADMIN_PASSWORD", "adminpass")
 
-    API_PREFIX = "/api"
-    UI_PREFIX = "/ui"
+    # be prefix aware if the app lives in /some-folder
+    API_PREFIX = os.getenv("API_PREFIX", "/api")
+    UI_PREFIX = os.getenv("UI_PREFIX", "/ui")

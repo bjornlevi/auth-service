@@ -61,14 +61,13 @@ def add_apikey():
 @login_required
 def delete_apikey(key_id):
     if not current_user.is_admin:
-        return "Forbidden", 403
+        return jsonify({"error": "Forbidden"}), 403
     k = db.session.get(ServiceApiKey, key_id)
     if k:
         db.session.delete(k)
         db.session.commit()
-        flash("API key deleted")
-    return redirect(url_for("ui.dashboard"))
-
+        return jsonify({"success": True, "id": key_id})
+    return jsonify({"error": "API key not found"}), 404
 
 @ui_bp.route("/users")
 @login_required

@@ -46,11 +46,11 @@ def create_app():
 
     # register blueprints
     api_prefix = app.config.get("API_PREFIX", "/auth")
-    ui_prefix = app.config.get("UI_PREFIX", "")  # "" = root by default
-    app.jinja_env.globals["ui_prefix"] = ui_prefix
-
+    ui_prefix = app.config.get("UI_PREFIX", "")
     app.register_blueprint(bp, url_prefix=api_prefix)
     app.register_blueprint(ui_bp, url_prefix=ui_prefix)
+
+    app.jinja_env.globals["ui_prefix"] = ui_prefix
 
     @app.route("/")
     def root_redirect():

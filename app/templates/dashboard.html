@@ -68,54 +68,11 @@
 </div>
 
 <script>
-  function showToast(message, type="success") {
-    const toastEl = document.getElementById('dashboardToast');
-    const toastBody = document.getElementById('dashboardToastMessage');
-    toastBody.innerText = message;
-
-    toastEl.classList.remove("text-bg-success", "text-bg-danger", "text-bg-warning");
-    toastEl.classList.add("text-bg-" + type);
-
-    const toast = new bootstrap.Toast(toastEl);
-    toast.show();
-  }
-
-  function copyApiKey(keyId) {
-    const text = document.getElementById(`key-${keyId}`).innerText;
-    navigator.clipboard.writeText(text).then(() => {
-      showToast("API key copied to clipboard!", "success");
-    }).catch(err => {
-      console.error("Failed to copy: ", err);
-      showToast("Failed to copy API key", "danger");
-    });
-  }
-
-  function deleteApiKey(keyId) {
-    if (!confirm("Delete this API key?")) return;
-    fetch(`/apikeys/delete/${keyId}`, { method: 'POST' })
-      .then(() => {
-        const row = document.getElementById(`key-row-${keyId}`);
-        if (row) row.remove();
-        showToast("API key deleted", "success");
-      })
-      .catch(err => {
-        console.error(err);
-        showToast("Failed to delete API key", "danger");
-      });
-  }
-
-  document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll("[data-action='copy-key']").forEach(btn => {
-      btn.addEventListener("click", () => {
-        copyApiKey(btn.dataset.keyId);
-      });
-    });
-
-    document.querySelectorAll("[data-action='delete-key']").forEach(btn => {
-      btn.addEventListener("click", () => {
-        deleteApiKey(btn.dataset.keyId);
-      });
-    });
-  });
+  const URLS = {
+    deleteApiKey: "{{ url_for('ui.delete_apikey', key_id=0) }}".replace("0", "__ID__"),
+    login: "{{ url_for('ui.login') }}",
+  };
 </script>
+<script type="module" src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
 {% endblock %}
