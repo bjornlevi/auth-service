@@ -3,11 +3,34 @@ import { fetchJson, showToast } from "./helpers.js";
 
 function copyApiKey(keyId) {
   const text = document.getElementById(`key-${keyId}`).innerText;
-  navigator.clipboard.writeText(text).then(() => {
-    showToast("API key copied to clipboard!", "success");
-  }).catch(() => {
-    showToast("Failed to copy API key", "danger");
-  });
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    // Modern API (works on https:// or http://localhost)
+    navigator.clipboard.writeText(text).then(() => {
+      showToast("API key copied to clipboard!", "success");
+    }).catch(() => {
+      showToast("Failed to copy API key", "danger");
+    });
+  } else {
+    // Fallback for plain http or older browsers
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+
+    try {
+      document.execCommand("copy");
+      showToast("API key copied to clipboard!", "success");
+    } catch (err) {
+      console.error("Fallback copy failed", err);
+      showToast("Failed to copy API key", "danger");
+    }
+
+    document.body.removeChild(textarea);
+  }
 }
 
 async function deleteApiKey(keyId) {
