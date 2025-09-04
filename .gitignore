@@ -72,3 +72,9 @@ docker-compose.override.yml
 # macOS / Linux system files
 .DS_Store
 Thumbs.db
+
+*.csv
+*.dev
+
+Dockerfile
+docker-compose.yml
