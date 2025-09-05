@@ -4,6 +4,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .models import User, ServiceApiKey, db
 import secrets
 from .utils import generate_reset_token, verify_reset_token
+from urllib.parse import urljoin
 
 ui_bp = Blueprint("ui", __name__)
 
@@ -150,7 +151,9 @@ def reset_password(user_id):
         return jsonify({"error": "User not found"}), 404
 
     token = generate_reset_token(user.username)
-    reset_url = url_for("ui.reset_with_token", token=token, _external=True)
+    base = request.url_root   # keeps trailing slash
+    path = url_for("ui.reset_with_token", token=token)
+    reset_url = urljoin(base, path)
 
     return jsonify({"reset_url": reset_url})
 
