@@ -16,3 +16,10 @@ class Config:
     # be prefix aware if the app lives in /some-folder
     API_PREFIX = os.getenv("API_PREFIX", "/api")
     UI_PREFIX = os.getenv("UI_PREFIX", "/ui")
+    
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 1800,
+        "pool_size": int(os.getenv("DB_POOL_SIZE", "5")),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "10")),
+    }

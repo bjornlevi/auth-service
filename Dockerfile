@@ -10,5 +10,5 @@ RUN pip install -r requirements.txt
 ENV PYTHONPATH=/app
 
 ENV FLASK_APP=app
-CMD ["flask", "run", "--host=0.0.0.0", "--port=5000", "--reload"]
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "-w", "2", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info", "app:create_app()"]
 

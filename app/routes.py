@@ -1,9 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import or_
 from .models import db, User, ServiceApiKey
 from .utils import generate_token, decode_token, require_api_key
+import logging
 
+audit = logging.getLogger("auth.audit")
 
 bp = Blueprint("auth", __name__, url_prefix="/api")
 
@@ -35,6 +37,9 @@ def register():
                 email=email,
                 password=generate_password_hash(password))
     db.session.add(user)
+
+    log.info("login_attempt", extra={"username": username, "exists": bool(user)})    
+
     db.session.commit()
     return {"message": "User registered"}, 201
 
@@ -50,13 +55,33 @@ def login():
     password = data.get("password")
 
     if not username or not password:
+        audit.info("login_failed", extra={
+            "username": username,
+            "reason": "missing_fields"
+        })
         return {"error": "Missing username or password"}, 400
 
     user = User.query.filter_by(username=username).first()
-    if not user or not check_password_hash(user.password, password):
+    if not user:
+        # Don’t reveal which part failed to the client; but log exact reason internally.
+        audit.info("login_failed", extra={
+            "username": username,
+            "reason": "user_not_found"
+        })
+        return {"error": "Invalid credentials"}, 401
+
+    if not check_password_hash(user.password, password):
+        audit.info("login_failed", extra={
+            "username": username,
+            "reason": "bad_password",
+            "user_exists": True
+        })
         return {"error": "Invalid credentials"}, 401
 
     token = generate_token(user.id)
+    svc = getattr(g, "calling_service", None)
+    audit.info("login_failed", extra={"username": username, "reason": "bad_password", "service": svc})
+
     return {"token": token}, 200
 
 

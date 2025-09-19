@@ -11,6 +11,17 @@ services:
     networks:
       - authnet
       - default
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    volumes:
+      - ./logs/auth-service:/var/log/auth-service
+    environment:
+      LOG_FILE: /var/log/auth-service/app.json        
+    labels:
+      - "app=auth-service"          
 
   db:
     image: mysql:8.0
@@ -26,6 +37,11 @@ services:
       timeout: 5s
     networks:
       - default
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   auth-db-data:

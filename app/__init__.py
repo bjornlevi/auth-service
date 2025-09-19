@@ -7,26 +7,38 @@ from .ui import ui_bp
 import secrets
 from werkzeug.security import generate_password_hash
 
+# NEW
+from .logging_setup import configure_logging, install_flask_hooks
+from . import db_logging
+
 login_manager = LoginManager()
-# Load environment variables from .env before anything else
 
 def create_app():
+    # 1) init logging FIRST so bootstrap logs are structured
+    configure_logging()
+
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # init extensions
+    # 2) init extensions
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = "ui.login"
 
+    # 3) request/access logging
+    install_flask_hooks(app)
+
     @login_manager.user_loader
     def load_user(user_id):
-        return db.session.get(User, int(user_id))  # SQLAlchemy 2.x safe
+        return db.session.get(User, int(user_id))
 
     with app.app_context():
         db.create_all()
 
-        # Ensure default admin exists
+        # 3b) install DB logging once engine exists
+        db_logging.install(db.engine)
+
+        # Bootstrap admin & API key (these prints will now be JSON logs if you want)
         default_admin = current_app.config["DEFAULT_ADMIN"]
         default_admin_password = current_app.config["DEFAULT_ADMIN_PASSWORD"]
 
@@ -35,27 +47,26 @@ def create_app():
                                 password=generate_password_hash(default_admin_password),
                                 is_admin=True))
             db.session.commit()
-            print(f"[BOOTSTRAP] Created admin user: {default_admin} / {default_admin_password}")
+            # Optional: use logging instead of print
+            import logging
+            logging.getLogger("bootstrap").info("created_admin", extra={"username": default_admin})
 
-        # Ensure at least one Service API key exists
         if not ServiceApiKey.query.first():
             default_key = secrets.token_hex(32)
             db.session.add(ServiceApiKey(key=default_key, description="Default service key"))
             db.session.commit()
-            print(f"[BOOTSTRAP] Default Service API key created: {default_key}")
+            import logging
+            logging.getLogger("bootstrap").info("created_default_service_key", extra={"key_suffix": default_key[-4:]})
 
-    # register blueprints
+    # 4) register blueprints
     api_prefix = app.config.get("API_PREFIX", "/auth")
     ui_prefix = app.config.get("UI_PREFIX", "")
     app.register_blueprint(bp, url_prefix=api_prefix)
     app.register_blueprint(ui_bp, url_prefix=ui_prefix)
-
     app.jinja_env.globals["ui_prefix"] = ui_prefix
 
     @app.route("/")
     def root_redirect():
-        # Always redirect root to the UI login
         return redirect(url_for("ui.login"))
 
     return app
-

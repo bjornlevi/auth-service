@@ -9,3 +9,4 @@ flask-login
 cryptography
 python-dotenv
 PyJWT
+gunicorn

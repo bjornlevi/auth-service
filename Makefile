@@ -13,6 +13,7 @@ up: net
 down:
 	docker compose down
 
+.PHONY: logs
 logs:
 	docker compose logs -f auth-service
 
