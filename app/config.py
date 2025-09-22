@@ -1,5 +1,12 @@
 import os
 
+def _norm(p: str | None) -> str:
+    if not p:
+        return ""
+    if not p.startswith("/"):
+        p = "/" + p
+    return p.rstrip("/")
+
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "super-secret")
     SQLALCHEMY_DATABASE_URI = (
@@ -13,9 +20,12 @@ class Config:
     DEFAULT_ADMIN = os.getenv("DEFAULT_ADMIN", "admin")
     DEFAULT_ADMIN_PASSWORD = os.getenv("DEFAULT_ADMIN_PASSWORD", "adminpass")
 
-    # be prefix aware if the app lives in /some-folder
-    API_PREFIX = os.getenv("API_PREFIX", "/api")
-    UI_PREFIX = os.getenv("UI_PREFIX", "/ui")
+    URL_PREFIX = _norm(os.getenv("URL_PREFIX", ""))  # e.g. "/auth-service" or ""
+    API_PREFIX = _norm(os.getenv("API_PREFIX", f"{URL_PREFIX}/api"))
+    UI_PREFIX  = _norm(os.getenv("UI_PREFIX",  f"{URL_PREFIX}/ui"))
+
+    # Flask will prepend APPLICATION_ROOT on url_for if set (useful for Option B)
+    APPLICATION_ROOT = URL_PREFIX or "/"
     
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,

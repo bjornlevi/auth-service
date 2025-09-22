@@ -123,10 +123,3 @@ def userinfo():
         "username": user.username,
         "created_at": user.created_at.isoformat()
     }, 200
-
-# ------------------------
-# Health Check
-# ------------------------
-@bp.route("/health", methods=["GET"])
-def health():
-    return {"status": "ok"}

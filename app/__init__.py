@@ -59,14 +59,28 @@ def create_app():
             logging.getLogger("bootstrap").info("created_default_service_key", extra={"key_suffix": default_key[-4:]})
 
     # 4) register blueprints
-    api_prefix = app.config.get("API_PREFIX", "/auth")
-    ui_prefix = app.config.get("UI_PREFIX", "")
-    app.register_blueprint(bp, url_prefix=api_prefix)
+    api_prefix = app.config["API_PREFIX"] or ""
+    ui_prefix  = app.config["UI_PREFIX"]  or ""
+    app.register_blueprint(bp,   url_prefix=api_prefix)
     app.register_blueprint(ui_bp, url_prefix=ui_prefix)
     app.jinja_env.globals["ui_prefix"] = ui_prefix
 
     @app.route("/")
     def root_redirect():
         return redirect(url_for("ui.login"))
+
+    @app.route("/health")
+    def health_root():
+        return {"status": "ok"}, 200
+
+    @app.route("/debug/routes")
+    def debug_routes():
+        return {
+            "APPLICATION_ROOT": app.config.get("APPLICATION_ROOT"),
+            "API_PREFIX": app.config.get("API_PREFIX"),
+            "UI_PREFIX": app.config.get("UI_PREFIX"),
+            "routes": sorted([str(r) for r in app.url_map.iter_rules()], key=lambda s: s)
+        }
+
 
     return app
