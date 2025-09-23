@@ -1,0 +1,14 @@
+.git
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+.env
+logs/
+dist/
+build/
+venv/
+.venv/
+.idea/
+.vscode/

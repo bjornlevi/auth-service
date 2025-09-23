@@ -1,31 +1,67 @@
 services:
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=web         # prefer backends on 'web'
+      - --entrypoints.web.address=:80
+      - --api.dashboard=true                   # (optional; remove in prod)
+      - --accesslog=true
+    ports:
+      - "80:80"                                # public HTTP
+      # - "8080:8080"                          # (optional) dashboard/API
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [web]
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options: { max-size: "10m", max-file: "3" }
+
   auth-service:
     build: .
     container_name: auth-service
-    expose:
-      - "5000"               # visible to other containers
     env_file: .env
+    expose:
+      - "5000"                                 # internal only
     depends_on:
       db:
         condition: service_healthy
     networks:
-      - authnet
-      - default
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "5"
+      - web                                    # browser traffic via Traefik
+      - authnet                                # service-to-service access
+      - auth_db                                # private DB link
     volumes:
       - ./logs/auth-service:/var/log/auth-service
     environment:
-      LOG_FILE: /var/log/auth-service/app.json        
+      LOG_FILE: /var/log/auth-service/app.json
     labels:
-      - "app=auth-service"          
+      - traefik.enable=true
+      - traefik.docker.network=web
+
+      # Router: serve the app under /auth-service
+      - traefik.http.routers.authsvc.rule=PathPrefix(`/auth-service`)
+      - traefik.http.routers.authsvc.entrypoints=web
+      - traefik.http.routers.authsvc.service=authsvc
+
+      # Backend service → container's internal port
+      - traefik.http.services.authsvc.loadbalancer.server.port=5000
+
+      # Middlewares: strip prefix, then pass it to Flask for URL generation
+      - traefik.http.middlewares.authsvc-strip.stripprefix.prefixes=/auth-service
+      - traefik.http.middlewares.authsvc-prefix.headers.customrequestheaders.X-Forwarded-Prefix=/auth-service
+      - traefik.http.middlewares.authsvc-prefix.headers.customrequestheaders.X-Script-Name=/auth-service
+      - traefik.http.routers.authsvc.middlewares=authsvc-strip,authsvc-prefix
+    logging:
+      driver: "json-file"
+      options: { max-size: "10m", max-file: "5" }
 
   db:
     image: mysql:8.0
-    command: --default-authentication-plugin=mysql_native_password    
+    container_name: auth-db
+    command: --default-authentication-plugin=caching_sha2_password
     restart: always
     env_file: .env
     volumes:
@@ -36,16 +72,27 @@ services:
       retries: 10
       timeout: 5s
     networks:
-      - default
+      - auth_db                                 # NOT on web/authnet
     logging:
       driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      options: { max-size: "10m", max-file: "3" }
 
 volumes:
   auth-db-data:
+    name: auth-db-data
 
 networks:
+  # Public ingress network (Traefik + any app you expose)
+  web:
+    external: true
+    name: web
+
+  # Shared inter-app network for calling auth-service directly
   authnet:
     external: true
+    name: authnet
+
+  # Private network between auth-service and its DB
+  auth_db:
+    internal: true
+    name: auth_db
