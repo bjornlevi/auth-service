@@ -73,6 +73,9 @@ docker-compose.override.yml
 .DS_Store
 Thumbs.db
 
+# log files
+logs/*
+
 *.csv
 *.dev
 

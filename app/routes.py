@@ -6,6 +6,7 @@ from .utils import generate_token, decode_token, require_api_key
 import logging
 
 audit = logging.getLogger("auth.audit")
+log = logging.getLogger("auth")
 
 bp = Blueprint("auth", __name__, url_prefix="/api")
 

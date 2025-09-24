@@ -67,8 +67,13 @@ health-web:
 HOST ?= 127.0.0.1
 HOST := $(strip $(HOST))
 health-host:
-	@URL="http://$(HOST)/auth-service/health"; echo "GET $$URL"
-	@curl -sS -i "$$URL"
+	@URL="http://$(HOST)/auth-service/health"; \
+	echo "GET $$URL"; \
+	tmpdir=$$(mktemp -d); \
+	code=$$(curl -sS -o $$tmpdir/body -D $$tmpdir/headers -w '%{http_code}' "$$URL"); \
+	cat $$tmpdir/headers | sed -n '1,20p'; echo; cat $$tmpdir/body | sed -n '1,20p'; \
+	rm -rf $$tmpdir; \
+	if [ "$$code" -eq 200 ]; then exit 0; else echo "HTTP $$code FAIL"; exit 1; fi
 
 # Through Traefik with external prefix (e.g. what browsers use)
 PREFIX ?= /auth-service
@@ -83,6 +88,24 @@ health-ext:
 	cat $$tmpdir/headers | sed -n '1,20p'; echo; cat $$tmpdir/body | sed -n '1,20p'; \
 	rm -rf $$tmpdir; \
 	[ "$$code" -lt 400 ] || { echo "HTTP $$code FAIL"; exit 1; }
+
+# Wait for ALL health checks to return 200 OK
+health-check:
+	@echo "⏳ Waiting for all services to become healthy..."
+	@for target in health-int health-authnet health-web health-host health-ext; do \
+	  echo "→ Checking $$target..."; \
+	  for i in 1 2 3 4 5 6 7 8 9 10; do \
+	    if $(MAKE) -s $$target >/dev/null 2>&1; then \
+	      echo "   ✔ $$target OK"; break; \
+	    else \
+	      echo "   … retrying in 3s"; sleep 3; \
+	    fi; \
+	    if [ $$i -eq 10 ]; then \
+	      echo "❌ $$target did not become healthy"; exit 1; \
+	    fi; \
+	  done; \
+	done
+	@echo "✅ All services healthy!"
 
 # Run all health checks; show PASS/FAIL per step and final summary
 health-all:
