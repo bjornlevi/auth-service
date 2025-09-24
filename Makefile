@@ -97,6 +97,35 @@ health-all:
 
 .PHONY: health-int health-authnet health-web health-host health-ext health-all
 
+# -------- API Smoke Test --------
+test-api:
+	@echo "🔑 Testing API login → userinfo → verify..."
+	@HOST=$${HOST:-127.0.0.1}; \
+	BASE="http://$$HOST/auth-service/api"; \
+	APIKEY=$$(grep '^AUTH_SERVICE_API_KEY=' .env | cut -d= -f2); \
+	USER=$$(grep '^DEFAULT_ADMIN=' .env | cut -d= -f2); \
+	PASS=$$(grep '^DEFAULT_ADMIN_PASSWORD=' .env | cut -d= -f2); \
+	echo "→ Login as $$USER..."; \
+	TOKEN=$$(curl -s -X POST "$$BASE/login" \
+	  -H "Content-Type: application/json" \
+	  -H "X-API-Key: $$APIKEY" \
+	  -d "{\"username\":\"$$USER\",\"password\":\"$$PASS\"}" | jq -r .token); \
+	if [ "$$TOKEN" = "null" ] || [ -z "$$TOKEN" ]; then \
+	  echo "❌ Login failed"; exit 1; fi; \
+	TOKEN_PREFIX=$$(echo $$TOKEN | cut -c1-16); \
+	echo "✅ Got token: $${TOKEN_PREFIX}..."; \
+	echo; echo "→ /userinfo"; \
+	curl -s -X POST "$$BASE/userinfo" \
+	  -H "Content-Type: application/json" \
+	  -H "X-API-Key: $$APIKEY" \
+	  -d "{\"token\":\"$$TOKEN\"}" | jq .; \
+	echo; echo "→ /verify"; \
+	curl -s -X POST "$$BASE/verify" \
+	  -H "Content-Type: application/json" \
+	  -H "X-API-Key: $$APIKEY" \
+	  -d "{\"token\":\"$$TOKEN\"}" | jq .
+
+
 # Show Flask routes through Traefik (from host)
 routes:
 	@curl -s http://$(HOST)/auth-service/debug/routes | python3 -m json.tool || \
