@@ -34,7 +34,7 @@ FLASK_ENV=development
 SECRET_KEY=${SECRET_KEY}
 
 # Site identity
-SITE_NAME=site_name_replace
+SITE_NAME=auth-service
 UI_PREFIX=/ui
 API_PREFIX=/api
 
