@@ -39,49 +39,70 @@ flask-shell:
 	$(COMPOSE) exec auth-service flask shell
 
 # -------- Health / Smoke tests --------
-# Internal (container-local) health
-health-int:
-	$(COMPOSE) exec auth-service sh -lc '\
-	  BODY=$$(curl -sS http://127.0.0.1:5000/health) || exit $$?; \
-	  python - <<PY 2>/dev/null || { echo "$$BODY"; exit 0; } \
-import json,sys; print(json.dumps(json.loads(sys.stdin.read()), indent=2)) \
-PY \
-	  <<< "$$BODY"'
 
-health-int-raw:
-	$(COMPOSE) exec auth-service sh -lc 'curl -i http://127.0.0.1:5000/health'
+# Internal (container-local) health: pretty JSON if possible, else raw headers
+health-int:
+	$(COMPOSE) exec auth-service sh -lc 'python -c "import json,urllib.request,sys; u=urllib.request.urlopen(\"http://127.0.0.1:5000/health\",timeout=3); print(json.dumps(json.loads(u.read().decode()), indent=2))" 2>/dev/null || curl -si http://127.0.0.1:5000/health'
 
 # ---------- Curl via helper container (no curl in your images) ----------
 # Usage:
 #   make curl-net NET=authnet URL=http://auth-service:5000/health
-#   make curl-net NET=web     URL=http://traefik/auth-service/api/health
+#   make curl-net NET=web     URL=http://traefik/auth-service/health
 curl-net:
 	@test -n "$(NET)" || (echo "❗ Set NET=authnet|web (or any docker network)"; exit 1)
 	@test -n "$(URL)" || (echo "❗ Set URL=http://..."; exit 1)
-	docker run --rm --network $(NET) curlimages/curl:latest -si $(URL)
+	docker run --rm --network $(NET) curlimages/curl:latest -si "$(URL)"
 
-# ---------- Health checks ----------
-# Internal service health (inside Docker, service-to-service path, no Traefik)
-# Uses the shared app network "authnet"
+# -------- Health / Smoke tests --------
+
+# Internal (container-local) health: pretty JSON if possible, else raw body
+health-int:
+	$(COMPOSE) exec auth-service sh -lc 'python -c "import json,urllib.request,sys; u=urllib.request.urlopen(\"http://127.0.0.1:5000/health\",timeout=3); print(json.dumps(json.loads(u.read().decode()), indent=2))" 2>/dev/null || python -c "import urllib.request; print(urllib.request.urlopen(\"http://127.0.0.1:5000/health\",timeout=3).read().decode())"'
+
+# Internal service health from another container on authnet
 health-authnet:
-	docker run --rm --network authnet curlimages/curl:latest -si http://auth-service:5000/health
+	@echo "GET http://auth-service:5000/health (on network authnet)"
+	@docker run --rm --network authnet curlimages/curl:latest -sS -i http://auth-service:5000/health
 
-# Through Traefik on the "web" network (browser path with prefix)
-# Hits the Traefik container by name
+# Through Traefik (inside the web network)
 health-web:
-	docker run --rm --network web curlimages/curl:latest -si http://traefik/auth-service/health
+	@echo "GET http://traefik/auth-service/health (on network web)"
+	@docker run --rm --network web curlimages/curl:latest -sS -i http://traefik/auth-service/health
 
 # From the host (Traefik published on :80). Override HOST if needed.
 HOST ?= 127.0.0.1
+HOST := $(strip $(HOST))
 health-host:
-	@curl -si "http://$(HOST)/auth-service/health"
+	@URL="http://$(HOST)/auth-service/health"; echo "GET $$URL"
+	@curl -sS -i "$$URL"
 
-.PHONY: curl-net health-authnet health-web health-host
-
-# Through Traefik with external prefix
+# Through Traefik with external prefix (e.g. what browsers use)
+PREFIX ?= /auth-service
+API_PREFIX ?=
+API_PREFIX := $(strip $(API_PREFIX))
+PREFIX := $(strip $(PREFIX))
 health-ext:
-	@echo "GET http://$(HOST)$(PREFIX)$(API_PREFIX)/health"
-	@curl -si http://$(HOST)$(PREFIX)$(API_PREFIX)/health | sed -n '1,20p'
+health-ext:
+	@URL="http://$(HOST)$(PREFIX)$(API_PREFIX)/health"; \
+	echo "GET $$URL"; \
+	tmpdir=$$(mktemp -d); \
+	code=$$(curl -sS -o $$tmpdir/body -D $$tmpdir/headers -w '%{http_code}' "$$URL"); \
+	cat $$tmpdir/headers | sed -n '1,20p'; echo; cat $$tmpdir/body | sed -n '1,20p'; \
+	rm -rf $$tmpdir; \
+	[ "$$code" -lt 400 ] || { echo "HTTP $$code FAIL"; exit 1; }
+
+# Run all health checks; show PASS/FAIL per step and final summary
+health-all:
+	@ec=0; \
+	step() { name="$$1"; shift; echo "── $$name ─────────────────────────────────────────"; if "$$@"; then echo "✔ $$name PASS"; else code=$$?; echo "✘ $$name FAIL (exit $$code)"; ec=1; fi; echo; }; \
+	step health-int      $(COMPOSE) exec auth-service sh -lc 'python -c "import json,urllib.request,sys; u=urllib.request.urlopen(\"http://127.0.0.1:5000/health\",timeout=3); print(json.dumps(json.loads(u.read().decode()), indent=2))" 2>/dev/null || python -c "import urllib.request; print(urllib.request.urlopen(\"http://127.0.0.1:5000/health\",timeout=3).read().decode())"'; \
+	step health-authnet  sh -lc "docker run --rm --network authnet curlimages/curl:latest -sS -i http://auth-service:5000/health"; \
+	step health-web      sh -lc "docker run --rm --network web curlimages/curl:latest -sS -i http://traefik/auth-service/health"; \
+	step health-host     sh -lc 'URL="http://$(HOST)/auth-service/health"; echo "GET $$URL"; curl -sS -i "$$URL"'; \
+	step health-ext      sh -lc 'URL="http://$(HOST)$(PREFIX)$(API_PREFIX)/health"; echo "GET $$URL"; curl -sS -i "$$URL" | sed -n "1,20p"'; \
+	if [ $$ec -eq 0 ]; then echo "✅ ALL HEALTH CHECKS PASSED"; else echo "❌ SOME HEALTH CHECKS FAILED"; fi; exit $$ec
+
+.PHONY: health-int health-authnet health-web health-host health-ext health-all
 
 # Debug route map (if you kept /debug/routes endpoint)
 routes:
