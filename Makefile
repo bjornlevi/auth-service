@@ -170,6 +170,9 @@ reset: down
 	@echo "🧹 Trying to delete external networks (safe to fail) ..."
 	-@docker network rm authnet 2>/dev/null || true
 	-@docker network rm web 2>/dev/null || true
+	@echo "🧽 Cleaning log directory..."
+	-@rm -rf logs/auth-service 2>/dev/null || true
+	-@mkdir -p logs/auth-service && chmod 777 logs/auth-service	
 	@echo "✅ Reset complete. Run 'make init', edit .env, then 'make up'."
 
 .PHONY: net up down restart ps logs tlogs shell flask-shell health-int health-ext routes build build-dev test test-env fdown fup init reset

@@ -1,135 +1,115 @@
 # app/logging_setup.py
-import json, logging, os, sys, time, uuid
-from contextvars import ContextVar
-from datetime import datetime, timezone
+import json
+import logging
+import os
+import time
+import uuid
+from logging import StreamHandler, FileHandler
+from flask import request, g
 
-_request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
+REDACT_KEYS = {"authorization", "x-api-key", "password", "token"}
 
-SENSITIVE_KEYS = {"password", "token", "access_token", "refresh_token", "x-api-key", "authorization"}
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        # base
+        payload = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + f".{int(time.time()*1000)%1000:03d}Z",
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        # merge record.extra (from logger.*(..., extra={...}))
+        for k, v in getattr(record, "__dict__", {}).items():
+            if k in ("args","asctime","created","exc_info","exc_text","filename","funcName",
+                     "levelname","levelno","lineno","module","msecs","message","msg","name",
+                     "pathname","process","processName","relativeCreated","stack_info","thread",
+                     "threadName"):
+                continue
+            payload[k] = v
+        # exception
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
 
-def _mask(val):
-    if val is None: return None
-    s = str(val)
-    return "****" if len(s) <= 8 else s[:2] + "****" + s[-2:]
+def _ensure_handler(logger, handler):
+    if not any(isinstance(h, handler.__class__) for h in logger.handlers):
+        logger.addHandler(handler)
 
-def _scrub_dict(d):
-    if not isinstance(d, dict): return d
+def configure_logging():
+    level = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_file = os.getenv("LOG_FILE")  # e.g. /var/log/auth-service/app.json
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    fmt = JsonFormatter()
+    sh = StreamHandler()
+    sh.setFormatter(fmt)
+    _ensure_handler(root, sh)
+
+    if log_file:
+        fh = FileHandler(log_file)
+        fh.setFormatter(fmt)
+        _ensure_handler(root, fh)
+
+def _redact_headers(h):
     out = {}
-    for k, v in d.items():
-        if k.lower() in SENSITIVE_KEYS:
-            out[k] = _mask(v)
+    for k, v in h.items():
+        if k.lower() in REDACT_KEYS:
+            if k.lower() == "x-api-key" and isinstance(v, str) and len(v) >= 4:
+                out[k] = f"***{v[-4:]}"      # keep last 4 for correlation
+            else:
+                out[k] = "****"
         else:
             out[k] = v
     return out
 
-_request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
-KNOWN_EXTRA = {
-    "method","path","endpoint","status","ok","latency_ms","remote_addr","user_agent",
-    "headers","json","service","duration_ms","statement","parameters"
-}
-
-class JsonFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        payload = {
-            "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
-            "level": record.levelname,
-            "logger": record.name,
-            "msg": record.getMessage(),
-            "request_id": _request_id.get(),
-        }
-
-        # Only copy **known** extras; coerce non-serializable values to str
-        rdict = record.__dict__
-        for key in KNOWN_EXTRA:
-            if key in rdict:
-                val = rdict[key]
-                try:
-                    json.dumps(val)           # probe serializability
-                    payload[key] = val
-                except Exception:
-                    payload[key] = str(val)
-
-        if record.exc_info:
-            payload["exc_info"] = self.formatException(record.exc_info)
-
-        # Final dump must never fail
-        return json.dumps(payload, ensure_ascii=False, default=str)
-
-def configure_logging():
-    level = os.getenv("LOG_LEVEL", "INFO").upper()
-    root = logging.getLogger()
-    root.setLevel(level)
-    for h in list(root.handlers):
-        root.removeHandler(h)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JsonFormatter())
-    root.addHandler(handler)
-
-    logging.getLogger("werkzeug").setLevel(os.getenv("WERKZEUG_LOG_LEVEL", "WARNING").upper())
-    logging.getLogger("sqlalchemy.engine").setLevel(os.getenv("SQL_LOG_LEVEL", "WARNING").upper())
-    logging.getLogger("sqlalchemy.pool").setLevel(os.getenv("SQL_POOL_LOG_LEVEL", "INFO").upper())
-
 def install_flask_hooks(app):
-    from flask import request, g
-
     access = logging.getLogger("access")
 
     @app.before_request
-    def _before():
+    def _start():
+        g._t0 = time.time()
+        # use incoming X-Request-ID or generate one
         rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex
-        _request_id.set(rid)
-        g._t0 = time.perf_counter()
+        g.request_id = rid
 
     @app.after_request
-    def _after(resp):
-        t1 = time.perf_counter()
-        latency_ms = round((t1 - getattr(g, "_t0", t1)) * 1000, 2)
-
-        # caller ip: if you add a reverse proxy later, X-Forwarded-For will be honored here
-        caller = request.headers.get("X-Forwarded-For") or request.remote_addr
-
-        # scrub input
-        json_body = request.get_json(silent=True) if request.is_json else None
-        json_body = _scrub_dict(json_body) if isinstance(json_body, dict) else None
-
-        headers = {}
-        for k, v in request.headers.items():
-            lk = k.lower()
-            if lk == "cookie":
-                continue
-            # mask sensitive if you do that; keep as plain str
-            headers[k] = str(v)
-
-        # Ensure json body is a plain dict (or None)
-        body = request.get_json(silent=True) if request.is_json else None
-        if not isinstance(body, dict):
-            body = None  # avoid lists/complex types in access log
-
+    def _after(response):
         try:
-            access.info("request", extra=dict(
-                method=request.method,
-                path=request.path,
-                endpoint=request.endpoint,
-                status=resp.status_code,
-                ok=(200 <= resp.status_code < 400),
-                latency_ms=latency_ms,
-                remote_addr=request.headers.get("X-Forwarded-For") or request.remote_addr,
-                user_agent=request.user_agent.string,
-                headers=headers,
-                json=body,
-            ))
-        except Exception:
-            # fallback in case something in extra breaks JSON serialization
-            logging.getLogger("access-fallback").warning(
-                "access_log_failed", exc_info=True
+            dt = (time.time() - getattr(g, "_t0", time.time())) * 1000.0
+            # propagate request id back
+            response.headers["X-Request-ID"] = getattr(g, "request_id", "")
+            # pick a few useful headers; dump all if you prefer
+            hdrs = {
+                "Host": request.headers.get("Host"),
+                "X-Forwarded-For": request.headers.get("X-Forwarded-For"),
+                "X-Forwarded-Proto": request.headers.get("X-Forwarded-Proto"),
+                "X-Api-Key": request.headers.get("X-Api-Key"),
+                "User-Agent": request.headers.get("User-Agent"),
+            }
+            access.info(
+                "request",
+                extra={
+                    "request_id": g.request_id,
+                    "method": request.method,
+                    "path": request.full_path.rstrip("?"),
+                    "status": response.status_code,
+                    "latency_ms": round(dt, 2),
+                    "remote_addr": request.headers.get("X-Forwarded-For", request.remote_addr),
+                    "user_agent": request.headers.get("User-Agent"),
+                    "headers": _redact_headers(hdrs),
+                },
             )
-        # surface the request id for callers
-        resp.headers["X-Request-ID"] = _request_id.get()
-        return resp
+        except Exception:
+            # never break the response because of logging
+            logging.getLogger("access").exception("access_log_error")
+        return response
 
     @app.errorhandler(Exception)
-    def _log_ex(e):
-        logging.getLogger("app").exception("unhandled_exception")
-        raise
-
-    return app
+    def _on_error(err):
+        # log full traceback with request id; let Flask render the error
+        logging.getLogger("app").exception(
+            "unhandled_exception",
+            extra={"request_id": getattr(g, "request_id", None)}
+        )
+        return err
