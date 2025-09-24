@@ -1,18 +1,19 @@
-from flask import Flask, current_app, redirect, url_for
+from flask import Flask, redirect, url_for
 from flask_login import LoginManager
+from sqlalchemy import select, text
+from werkzeug.security import generate_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
+import secrets, logging
+
 from .config import Config
 from .models import db, ServiceApiKey, User
 from .routes import bp
 from .ui import ui_bp
-import secrets
-from werkzeug.security import generate_password_hash
-from werkzeug.middleware.proxy_fix import ProxyFix
-
-# NEW
 from .logging_setup import configure_logging, install_flask_hooks
 from . import db_logging
 
 login_manager = LoginManager()
+
 
 def create_app():
     # 1) init logging FIRST so bootstrap logs are structured
@@ -21,7 +22,7 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-    
+
     # 2) init extensions
     db.init_app(app)
     login_manager.init_app(app)
@@ -33,32 +34,6 @@ def create_app():
     @login_manager.user_loader
     def load_user(user_id):
         return db.session.get(User, int(user_id))
-
-    with app.app_context():
-        db.create_all()
-
-        # 3b) install DB logging once engine exists
-        db_logging.install(db.engine)
-
-        # Bootstrap admin & API key (these prints will now be JSON logs if you want)
-        default_admin = current_app.config["DEFAULT_ADMIN"]
-        default_admin_password = current_app.config["DEFAULT_ADMIN_PASSWORD"]
-
-        if not User.query.filter_by(username=default_admin).first():
-            db.session.add(User(username=default_admin,
-                                password=generate_password_hash(default_admin_password),
-                                is_admin=True))
-            db.session.commit()
-            # Optional: use logging instead of print
-            import logging
-            logging.getLogger("bootstrap").info("created_admin", extra={"username": default_admin})
-
-        if not ServiceApiKey.query.first():
-            default_key = secrets.token_hex(32)
-            db.session.add(ServiceApiKey(key=default_key, description="Default service key"))
-            db.session.commit()
-            import logging
-            logging.getLogger("bootstrap").info("created_default_service_key", extra={"key_suffix": default_key[-4:]})
 
     # 4) register blueprints
     api_prefix = app.config["API_PREFIX"] or ""
@@ -84,5 +59,52 @@ def create_app():
             "routes": sorted([str(r) for r in app.url_map.iter_rules()], key=lambda s: s)
         }
 
-
     return app
+
+def bootstrap_defaults(app):
+    with app.app_context():
+        # serialize bootstrap across processes/containers
+        with db.engine.begin() as conn:
+            got = conn.execute(text("SELECT GET_LOCK('auth_bootstrap', 60)")).scalar()
+            if got != 1:
+                # someone else is bootstrapping; just skip
+                logging.getLogger("bootstrap").info("bootstrap_lock_skipped")
+                return
+            try:
+                db.create_all()
+                # install DB logging AFTER engine exists
+                from . import db_logging
+                db_logging.install(db.engine)
+
+                default_admin = app.config["DEFAULT_ADMIN"]
+                default_admin_password = app.config["DEFAULT_ADMIN_PASSWORD"]
+                if not User.query.filter_by(username=default_admin).first():
+                    db.session.add(User(
+                        username=default_admin,
+                        password=generate_password_hash(default_admin_password),
+                        is_admin=True
+                    ))
+                    db.session.commit()
+                    logging.getLogger("bootstrap").info("created_admin", extra={"username": default_admin})
+
+                env_key = (app.config.get("AUTH_SERVICE_API_KEY") or "").strip() or None
+                if env_key:
+                    exists = db.session.execute(
+                        select(ServiceApiKey.id).where(ServiceApiKey.key == env_key)
+                    ).first()
+                    if not exists:
+                        db.session.add(ServiceApiKey(key=env_key, description="Env default service key"))
+                        db.session.commit()
+                        logging.getLogger("bootstrap").info(
+                            "created_env_service_key", extra={"key_suffix": env_key[-4:]}
+                        )
+                else:
+                    if not db.session.execute(select(ServiceApiKey.id)).first():
+                        default_key = secrets.token_hex(32)  # 64 hex chars
+                        db.session.add(ServiceApiKey(key=default_key, description="Default service key"))
+                        db.session.commit()
+                        logging.getLogger("bootstrap").info(
+                            "created_random_service_key", extra={"key_suffix": default_key[-4:]}
+                        )
+            finally:
+                conn.execute(text("SELECT RELEASE_LOCK('auth_bootstrap')"))

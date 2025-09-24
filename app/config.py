@@ -15,7 +15,7 @@ class Config:
         f"{os.getenv('MYSQL_DATABASE')}?charset=utf8mb4"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    API_KEYS = [k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()]
+    AUTH_SERVICE_API_KEY = os.getenv("AUTH_SERVICE_API_KEY")  # optional; 64 hex chars recommended
 
     # bootstrap admin
     DEFAULT_ADMIN = os.getenv("DEFAULT_ADMIN", "admin")

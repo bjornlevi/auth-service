@@ -46,7 +46,7 @@ ENV PYTHONPATH=/app \
     FLASK_APP=app
 
 # Gunicorn (prod)
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "-w", "2", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info", "app:create_app()"]
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "-w", "2", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info", "wsgi:app"]
 
 # Flat /health inside the container
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \

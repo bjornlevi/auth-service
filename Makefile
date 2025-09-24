@@ -38,12 +38,6 @@ shell:
 flask-shell:
 	$(COMPOSE) exec auth-service flask shell
 
-# -------- Health / Smoke tests --------
-
-# Internal (container-local) health: pretty JSON if possible, else raw headers
-health-int:
-	$(COMPOSE) exec auth-service sh -lc 'python -c "import json,urllib.request,sys; u=urllib.request.urlopen(\"http://127.0.0.1:5000/health\",timeout=3); print(json.dumps(json.loads(u.read().decode()), indent=2))" 2>/dev/null || curl -si http://127.0.0.1:5000/health'
-
 # ---------- Curl via helper container (no curl in your images) ----------
 # Usage:
 #   make curl-net NET=authnet URL=http://auth-service:5000/health
@@ -82,7 +76,6 @@ API_PREFIX ?=
 API_PREFIX := $(strip $(API_PREFIX))
 PREFIX := $(strip $(PREFIX))
 health-ext:
-health-ext:
 	@URL="http://$(HOST)$(PREFIX)$(API_PREFIX)/health"; \
 	echo "GET $$URL"; \
 	tmpdir=$$(mktemp -d); \
@@ -104,9 +97,10 @@ health-all:
 
 .PHONY: health-int health-authnet health-web health-host health-ext health-all
 
-# Debug route map (if you kept /debug/routes endpoint)
+# Show Flask routes through Traefik (from host)
 routes:
-	$(COMPOSE) exec auth-service sh -lc 'curl -s http://127.0.0.1:5000/debug/routes || true'
+	@curl -s http://$(HOST)/auth-service/debug/routes | python3 -m json.tool || \
+	 (echo "❌ Failed to fetch routes from host"; exit 1)
 
 # -------- Build images (prod vs dev) --------
 # Production image uses the final "runtime" stage of your multi-stage Dockerfile
@@ -140,12 +134,13 @@ init:
 	@$(MAKE) net
 
 reset: down
-	@echo "⚠️  Removing DB volume and .env to start fresh..."
-	-@docker volume rm $$(docker volume ls -q | grep -E '^auth-service_auth-db-data$$') || true
+	@echo "⚠️  Removing DB volume(s) and .env to start fresh..."
+	-@docker volume rm auth-db-data 2>/dev/null || true
+	-@docker volume rm $$(docker volume ls -q | grep -E '(^|_)auth-db-data$$') 2>/dev/null || true
 	-@rm -f .env
 	@echo "🧹 Trying to delete external networks (safe to fail) ..."
 	-@docker network rm authnet 2>/dev/null || true
 	-@docker network rm web 2>/dev/null || true
-	@echo "✅ Reset complete. Run 'make init' then 'make up'."
+	@echo "✅ Reset complete. Run 'make init', edit .env, then 'make up'."
 
 .PHONY: net up down restart ps logs tlogs shell flask-shell health-int health-ext routes build build-dev test test-env fdown fup init reset

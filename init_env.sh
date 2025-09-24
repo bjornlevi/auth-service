@@ -12,7 +12,7 @@ fi
 
 # Generate secure random values
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
-DEFAULT_API_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(64))')
+DEFAULT_API_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
 MYSQL_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
 MYSQL_ROOT_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
 DEFAULT_ADMIN_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
