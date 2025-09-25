@@ -46,11 +46,5 @@ DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
 AUTH_SERVICE_API_KEY=${DEFAULT_API_KEY}
 EOL
 
-# Ensure host log directory exists and is writable for the container bind mount
-LOG_DIR="./logs/auth-service"
-mkdir -p "$LOG_DIR"
-chmod 777 "$LOG_DIR" || true
-echo "📁 Ensured $LOG_DIR exists and is writable."
-
 echo "✅ $ENV_FILE created with secure random values."
 echo "   Default admin = admin / ${DEFAULT_ADMIN_PASSWORD}"

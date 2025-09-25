@@ -14,7 +14,6 @@ from . import db_logging
 
 login_manager = LoginManager()
 
-
 def create_app():
     # 1) init logging FIRST so bootstrap logs are structured
     configure_logging()

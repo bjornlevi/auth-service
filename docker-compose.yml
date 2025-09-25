@@ -5,19 +5,19 @@ services:
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=web         # prefer backends on 'web'
+      - --providers.docker.network=web
       - --entrypoints.web.address=:80
-      - --api.dashboard=true                   # (optional; remove in prod)
+      - --api.dashboard=true
       - --accesslog=true
     ports:
-      - "80:80"                                # public HTTP
-      # - "8080:8080"                          # (optional) dashboard/API
+      - "80:80"
+      # - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [web]
     restart: unless-stopped
     logging:
-      driver: "json-file"
+      driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
   auth-service:
@@ -25,37 +25,29 @@ services:
     container_name: auth-service
     env_file: .env
     expose:
-      - "5000"                                 # internal only
+      - "5000"
     depends_on:
       db:
         condition: service_healthy
     networks:
-      - web                                    # browser traffic via Traefik
-      - authnet                                # service-to-service access
-      - auth_db                                # private DB link
-    volumes:
-      - ./logs/auth-service:/var/log/auth-service:rw
+      - web
+      - authnet
+      - auth_db
     environment:
-      LOG_FILE: /var/log/auth-service/app.json
+      LOG_FILE: /app/logs/app.json
     labels:
       - traefik.enable=true
       - traefik.docker.network=web
-
-      # Router: serve the app under /auth-service
       - traefik.http.routers.authsvc.rule=PathPrefix(`/auth-service`)
       - traefik.http.routers.authsvc.entrypoints=web
       - traefik.http.routers.authsvc.service=authsvc
-
-      # Backend service → container's internal port
       - traefik.http.services.authsvc.loadbalancer.server.port=5000
-
-      # Middlewares: strip prefix, then pass it to Flask for URL generation
       - traefik.http.middlewares.authsvc-strip.stripprefix.prefixes=/auth-service
       - traefik.http.middlewares.authsvc-prefix.headers.customrequestheaders.X-Forwarded-Prefix=/auth-service
       - traefik.http.middlewares.authsvc-prefix.headers.customrequestheaders.X-Script-Name=/auth-service
       - traefik.http.routers.authsvc.middlewares=authsvc-strip,authsvc-prefix
     logging:
-      driver: "json-file"
+      driver: json-file
       options: { max-size: "10m", max-file: "5" }
 
   db:
@@ -72,9 +64,9 @@ services:
       retries: 10
       timeout: 5s
     networks:
-      - auth_db                                 # NOT on web/authnet
+      - auth_db
     logging:
-      driver: "json-file"
+      driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
 volumes:
@@ -82,17 +74,12 @@ volumes:
     name: auth-db-data
 
 networks:
-  # Public ingress network (Traefik + any app you expose)
   web:
     external: true
     name: web
-
-  # Shared inter-app network for calling auth-service directly
   authnet:
     external: true
     name: authnet
-
-  # Private network between auth-service and its DB
   auth_db:
     internal: true
     name: auth_db

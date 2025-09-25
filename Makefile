@@ -32,6 +32,9 @@ logs:
 tlogs:
 	$(COMPOSE) logs -f traefik
 
+dblogs:
+	docker logs -f auth-db
+
 shell:
 	$(COMPOSE) exec $(S) sh -lc 'exec bash || exec sh'
 

@@ -37,7 +37,7 @@ def _ensure_handler(logger, handler):
 
 def configure_logging():
     level = os.getenv("LOG_LEVEL", "INFO").upper()
-    log_file = os.getenv("LOG_FILE")  # e.g. /var/log/auth-service/app.json
+    log_file = os.getenv("LOG_FILE")
     root = logging.getLogger()
     root.setLevel(level)
 
@@ -107,9 +107,8 @@ def install_flask_hooks(app):
 
     @app.errorhandler(Exception)
     def _on_error(err):
-        # log full traceback with request id; let Flask render the error
         logging.getLogger("app").exception(
             "unhandled_exception",
             extra={"request_id": getattr(g, "request_id", None)}
         )
-        return err
+        return jsonify(error="internal_server_error"), 500
